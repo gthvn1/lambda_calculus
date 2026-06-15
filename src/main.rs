@@ -22,6 +22,51 @@ impl Term {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Token {
+    Variable(String),
+    Lambda,
+    Dot,
+    LeftParen,
+    RightParen,
+}
+
+fn tokenize(input: &str) -> Vec<Token> {
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut iter = input.chars().peekable();
+
+    while let Some(c) = iter.next() {
+        if c.is_whitespace() {
+            // Just skip whitespace
+            continue;
+        }
+
+        match c {
+            '\\' => tokens.push(Token::Lambda),
+            '.' => tokens.push(Token::Dot),
+            '(' => tokens.push(Token::LeftParen),
+            ')' => tokens.push(Token::RightParen),
+            c if c.is_alphabetic() => {
+                // We build the string
+                let mut buffer = c.to_string();
+                while let Some(&next_c) = iter.peek() {
+                    if next_c.is_alphabetic() {
+                        buffer.push(iter.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(Token::Variable(buffer));
+            }
+            _ => panic!("unexpected"),
+        }
+    }
+
+    tokens
+}
+
+// Here is our grammar for lambda calculus
+//
 // term        := '\' char '.' term | application
 // application := atom+
 // atom        := char | '(' term ')'
@@ -116,6 +161,51 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --------------------------- TOKEN
+
+    #[test]
+    fn tokenize_variables() {
+        let tokens = tokenize("x y z");
+        let expected = ["x", "y", "z"].map(|x| Token::Variable(x.to_string()));
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn tokenize_application() {
+        let tokens = tokenize("((x y) z)");
+        let expected = [
+            Token::LeftParen,
+            Token::LeftParen,
+            Token::Variable("x".to_string()),
+            Token::Variable("y".to_string()),
+            Token::RightParen,
+            Token::Variable("z".to_string()),
+            Token::RightParen,
+        ];
+
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn tokenize_abstraction() {
+        let tokens = tokenize("((\\x. y) z)");
+        let expected = [
+            Token::LeftParen,
+            Token::LeftParen,
+            Token::Lambda,
+            Token::Variable("x".to_string()),
+            Token::Dot,
+            Token::Variable("y".to_string()),
+            Token::RightParen,
+            Token::Variable("z".to_string()),
+            Token::RightParen,
+        ];
+
+        assert_eq!(tokens, expected);
+    }
+
+    // --------------------------- PARSE
 
     // I = λx. x
     #[test]
