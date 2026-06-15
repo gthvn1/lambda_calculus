@@ -1,6 +1,3 @@
-use std::iter::Peekable;
-use std::str::Chars;
-
 #[derive(Debug, PartialEq, Eq)]
 enum Term {
     Variable(String),
@@ -67,90 +64,77 @@ fn tokenize(input: &str) -> Vec<Token> {
 
 // Here is our grammar for lambda calculus
 //
-// term        := '\' char '.' term | application
+// term        := LAMBDA VARIABLE DOT term | application
 // application := atom+
-// atom        := char | '(' term ')'
+// atom        := VARIABLE | LEFTPAREN term RIGHTPAREN
 
-fn parse_term(iter: &mut Peekable<Chars>) -> Term {
-    skip_whitespace(iter);
+fn parse(tokens: Vec<Token>) -> Term {
+    let mut iter = tokens.into_iter().peekable();
+    parse_term(&mut iter)
+}
+
+fn parse_term(iter: &mut std::iter::Peekable<std::vec::IntoIter<Token>>) -> Term {
     match iter.peek() {
-        Some(&'\\') => {
-            // We are expecting an alphabetic
+        Some(Token::Lambda) => {
+            // Consume the lamda
             iter.next();
-            if let Some(c) = iter.next() {
-                if c.is_alphabetic() {
-                    let input_var = c;
-                    if let Some('.') = iter.next() {
-                        let body = parse_term(iter);
-                        Term::abs(&input_var.to_string(), body)
-                    } else {
-                        panic!("We are expecting a dot to separate variables from body")
-                    }
-                } else {
-                    panic!("We are expecting an alphabetic character")
-                }
+            // We are expecting an alphabetic
+            let name = if let Some(Token::Variable(var)) = iter.next() {
+                var
             } else {
-                panic!("we are expecting a character")
-            }
+                panic!("A variable is expected after lambda");
+            };
+
+            if let Some(Token::Dot) = iter.next() {
+                // Nothing to do
+            } else {
+                panic!("A dot is expected after a variable in an abstraction");
+            };
+
+            let body = parse_term(iter);
+            Term::Abstraction(name, Box::new(body))
         }
         _ => parse_application(iter),
     }
 }
 
-fn parse_application(iter: &mut Peekable<Chars>) -> Term {
+fn parse_application(iter: &mut std::iter::Peekable<std::vec::IntoIter<Token>>) -> Term {
     // we are expecting an atom
     let mut left = parse_atom(iter);
+
     // Check if we have another atom
-    skip_whitespace(iter);
-    while let Some(&c) = iter.peek() {
-        if c == '(' || c.is_alphabetic() {
-            let right = parse_atom(iter);
-            left = Term::app(left, right);
-        } else {
-            break;
+    while let Some(token) = iter.peek() {
+        match token {
+            Token::LeftParen | Token::Variable(_) => {
+                let right = parse_atom(iter);
+                left = Term::app(left, right);
+            }
+            _ => break,
         }
-        skip_whitespace(iter);
     }
 
     left
 }
 
-fn parse_atom(iter: &mut Peekable<Chars>) -> Term {
-    skip_whitespace(iter);
-    match iter.peek() {
-        Some(&'(') => {
-            iter.next(); // consume open parenthesis
+fn parse_atom(iter: &mut std::iter::Peekable<std::vec::IntoIter<Token>>) -> Term {
+    match iter.next() {
+        Some(Token::LeftParen) => {
             let term = parse_term(iter);
             // Check if we have the expected closing parenthesis,
             // just panic for now if it is not the case.
             // We can skip whitespace before parenthesis
-            skip_whitespace(iter);
-            if iter.peek() == Some(&')') {
+            if iter.peek() == Some(&Token::RightParen) {
                 iter.next();
                 term
             } else {
                 panic!("')' is missing");
             }
         }
-        Some(&c) if c.is_alphabetic() => {
-            if let Some(c) = iter.next() {
-                Term::var(&c.to_string())
-            } else {
-                panic!("failed to read char");
-            }
-        }
-        Some(c) => panic!("char {} is not handled", c),
+        Some(Token::Variable(name)) => Term::Variable(name),
+        Some(Token::Lambda) => panic!("lamda is not expected here"),
+        Some(Token::Dot) => panic!("a dot is not expected here"),
+        Some(Token::RightParen) => panic!("Right paren is not expected here"),
         None => panic!("a variable is missing"),
-    }
-}
-
-fn skip_whitespace(iter: &mut Peekable<Chars>) {
-    while let Some(c) = iter.peek() {
-        if c.is_whitespace() {
-            iter.next();
-        } else {
-            break;
-        }
     }
 }
 
@@ -231,7 +215,8 @@ mod tests {
     // helper: build the iterator, call parse_atom, and check
     // that the WHOLE input was consumed (nothing left over).
     fn atom_of(s: &str) -> Term {
-        let mut it = s.chars().peekable();
+        let tokens = tokenize(s);
+        let mut it = tokens.into_iter().peekable();
         let t = parse_atom(&mut it);
         assert!(it.next().is_none(), "leftover characters remain");
         t
@@ -251,8 +236,7 @@ mod tests {
     #[should_panic]
     fn atom_empty_panics() {
         // empty input: parse_atom must panic (nothing to read)
-        let mut it = "".chars().peekable();
-        let _ = parse_atom(&mut it);
+        let _ = parse(tokenize(""));
     }
 
     #[test]
@@ -261,35 +245,29 @@ mod tests {
         // "(x": opens, reads term x, then expects ')' which is missing -> panic
         // (this exercises parse_term, so it only passes once parse_term exists;
         //  set it aside if parse_term isn't written yet)
-        let mut it = "(x".chars().peekable();
-        let _ = parse_atom(&mut it);
-    }
-
-    fn app_of(s: &str) -> Term {
-        let mut it = s.chars().peekable();
-        let t = parse_application(&mut it);
-        // not asserting full consumption here: trailing spaces may remain,
-        // and parse_application stops at the first non-atom char
-        t
+        let _ = parse(tokenize("(x"));
     }
 
     #[test]
     fn single_atom_is_just_the_atom() {
         // one atom, zero repetition: result is the atom itself, no App node
-        assert_eq!(app_of("x"), Term::var("x"));
+        assert_eq!(parse(tokenize("x")), Term::var("x"));
     }
 
     #[test]
     fn two_atoms_apply() {
         // f g  ->  App(f, g)
-        assert_eq!(app_of("f g"), Term::app(Term::var("f"), Term::var("g")));
+        assert_eq!(
+            parse(tokenize("f g")),
+            Term::app(Term::var("f"), Term::var("g"))
+        );
     }
 
     #[test]
     fn three_atoms_left_assoc() {
         // f g h  ->  App(App(f, g), h)   -- LEFT associative
         assert_eq!(
-            app_of("f g h"),
+            parse(tokenize("f g h")),
             Term::app(Term::app(Term::var("f"), Term::var("g")), Term::var("h"))
         );
     }
@@ -298,7 +276,7 @@ mod tests {
     fn extra_whitespace_is_ignored() {
         // multiple/odd spacing must not change the result
         assert_eq!(
-            app_of("  f   g  h "),
+            parse(tokenize("  f     g  h   ")),
             Term::app(Term::app(Term::var("f"), Term::var("g")), Term::var("h"))
         );
     }
@@ -308,18 +286,16 @@ mod tests {
         // (f) g  ->  App(f, g)   -- parens around a single atom are transparent
         // this exercises parse_atom's '(' branch, which calls parse_term;
         // it only passes once parse_term exists. set aside if not yet written.
-        assert_eq!(app_of("(f) g"), Term::app(Term::var("f"), Term::var("g")));
-    }
-
-    fn parse(s: &str) -> Term {
-        let mut it = s.chars().peekable();
-        parse_term(&mut it)
+        assert_eq!(
+            parse(tokenize("(f) g")),
+            Term::app(Term::var("f"), Term::var("g"))
+        );
     }
 
     #[test]
     fn identity() {
         // \x. x  ->  Abs("x", Var("x"))
-        assert_eq!(parse("\\x. x"), Term::abs("x", Term::var("x")));
+        assert_eq!(parse(tokenize("\\x. x")), Term::abs("x", Term::var("x")));
     }
 
     #[test]
@@ -327,7 +303,7 @@ mod tests {
         // \x. \y. x  ->  Abs("x", Abs("y", Var("x")))
         // this is the GREEDY test: body of \x is itself an abstraction
         assert_eq!(
-            parse("\\x. \\y. x"),
+            parse(tokenize("\\x. \\y. x")),
             Term::abs("x", Term::abs("y", Term::var("x")))
         );
     }
@@ -337,7 +313,7 @@ mod tests {
         // \x. x y  ->  Abs("x", App(x, y))   NOT  App(Abs("x", x), y)
         // the lambda swallows "x y" entirely as its body
         assert_eq!(
-            parse("\\x. x y"),
+            parse(tokenize("\\x. x y")),
             Term::abs("x", Term::app(Term::var("x"), Term::var("y")))
         );
     }
@@ -347,7 +323,7 @@ mod tests {
         // (\x. x) y  ->  App(Abs("x", x), y)
         // parens STOP the greedy lambda, so it's an application
         assert_eq!(
-            parse("(\\x. x) y"),
+            parse(tokenize("(\\x. x) y")),
             Term::app(Term::abs("x", Term::var("x")), Term::var("y"))
         );
     }
@@ -356,7 +332,7 @@ mod tests {
     fn identity_applied_to_identity() {
         // (\x. x) (\y. y)
         assert_eq!(
-            parse("(\\x. x) (\\y. y)"),
+            parse(tokenize("(\\x. x) (\\y. y)")),
             Term::app(
                 Term::abs("x", Term::var("x")),
                 Term::abs("y", Term::var("y"))
