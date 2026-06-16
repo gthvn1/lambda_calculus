@@ -73,6 +73,18 @@ impl Term {
     }
 }
 
+impl fmt::Display for Term {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Term::Variable(s) => write!(f, "{}", s)?,
+            Term::Application(m, n) => write!(f, "({} {})", m, n)?,
+            Term::Abstraction(v, body) => write!(f, "(\\{}. {})", v, body)?,
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Token {
     Variable(String),
@@ -198,7 +210,8 @@ fn parse_atom(
 }
 
 fn main() {
-    println!("Hello, world!");
+    let ast = parse(tokenize("\\x. x").unwrap()).unwrap();
+    println!("{}", ast);
 }
 
 #[cfg(test)]
@@ -401,5 +414,19 @@ mod tests {
                 Term::abs("y", Term::var("y"))
             )
         );
+    }
+
+    // Pretty printer
+    #[test]
+    fn print_then_parse_roundtrips() {
+        // the key property: printing a term and re-parsing it yields the same term
+        let cases = ["x", "\\x. x", "f g", "f g h", "\\x. \\y. x", "(\\x. x) y"];
+        for s in cases {
+            let t1 = parse(tokenize(s).unwrap()).unwrap();
+            let printed = format!("{}", t1);
+            let t2 = parse(tokenize(&printed).unwrap())
+                .unwrap_or_else(|e| panic!("could not re-parse {:?}: {}", printed, e));
+            assert_eq!(t1, t2, "roundtrip failed: {:?} printed as {:?}", s, printed);
+        }
     }
 }
