@@ -73,15 +73,47 @@ impl Term {
     }
 }
 
+#[derive(PartialEq)]
+enum Pos {
+    Top,
+    AppLeft,
+    AppRight,
+    AbsBody,
+}
+
+fn fmt_term(t: &Term, pos: Pos, f: &mut fmt::Formatter) -> fmt::Result {
+    match t {
+        Term::Variable(s) => write!(f, "{}", s)?,
+        Term::Application(m, n) => {
+            if pos == Pos::AppRight {
+                write!(f, "(")?;
+            }
+            fmt_term(m, Pos::AppLeft, f)?;
+            write!(f, " ")?;
+            fmt_term(n, Pos::AppRight, f)?;
+            if pos == Pos::AppRight {
+                write!(f, ")")?;
+            }
+        }
+        Term::Abstraction(v, body) => {
+            if pos == Pos::AppLeft || pos == Pos::AppRight {
+                write!(f, "(")?;
+            }
+            write!(f, "λ")?;
+            write!(f, "{}. ", v)?;
+            fmt_term(body, Pos::AbsBody, f)?;
+            if pos == Pos::AppLeft || pos == Pos::AppRight {
+                write!(f, ")")?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Term::Variable(s) => write!(f, "{}", s)?,
-            Term::Application(m, n) => write!(f, "({} {})", m, n)?,
-            Term::Abstraction(v, body) => write!(f, "(\\{}. {})", v, body)?,
-        }
-
-        Ok(())
+        fmt_term(self, Pos::Top, f)
     }
 }
 
@@ -105,7 +137,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>, LexError> {
         }
 
         match c {
-            '\\' => tokens.push(Token::Lambda),
+            '\\' | 'λ' => tokens.push(Token::Lambda),
             '.' => tokens.push(Token::Dot),
             '(' => tokens.push(Token::LeftParen),
             ')' => tokens.push(Token::RightParen),
@@ -210,7 +242,7 @@ fn parse_atom(
 }
 
 fn main() {
-    let ast = parse(tokenize("\\x. x").unwrap()).unwrap();
+    let ast = parse(tokenize("((\\x. x) (\\y. y))").unwrap()).unwrap();
     println!("{}", ast);
 }
 
@@ -418,15 +450,46 @@ mod tests {
 
     // Pretty printer
     #[test]
+    fn pretty_print_exact_output() {
+        // exact string output, checking MINIMAL parenthesization
+        let cases = [
+            ("x", "x"),
+            ("\\x. x", "λx. x"),
+            ("f g", "f g"),
+            ("f g h", "f g h"),                       // left-assoc: no parens
+            ("f (g h)", "f (g h)"),                   // right child is app: parens needed
+            ("\\x. \\y. x", "λx. λy. x"),             // nested abs in body: no parens
+            ("\\x. x y", "λx. x y"),                  // greedy body: no parens
+            ("(\\x. x) y", "(λx. x) y"),              // abs as function (AppLeft): parens
+            ("f (\\x. x) y", "f (λx. x) y"),          // abs as argument mid (AppRight): parens
+            ("(\\x. x) (\\y. y)", "(λx. x) (λy. y)"), // both: left parenthesized, right too
+        ];
+        for (input, expected) in cases {
+            let t = parse(tokenize(input).unwrap()).unwrap();
+            assert_eq!(format!("{}", t), expected, "input was {:?}", input);
+        }
+    }
+
+    #[test]
     fn print_then_parse_roundtrips() {
-        // the key property: printing a term and re-parsing it yields the same term
-        let cases = ["x", "\\x. x", "f g", "f g h", "\\x. \\y. x", "(\\x. x) y"];
+        // the printed form must re-parse to the same tree
+        let cases = [
+            "x",
+            "\\x. x",
+            "f g",
+            "f g h",
+            "f (g h)",
+            "\\x. \\y. x",
+            "(\\x. x) y",
+            "f (\\x. x) y",
+            "(\\x. x) (\\y. y)",
+        ];
         for s in cases {
             let t1 = parse(tokenize(s).unwrap()).unwrap();
             let printed = format!("{}", t1);
             let t2 = parse(tokenize(&printed).unwrap())
                 .unwrap_or_else(|e| panic!("could not re-parse {:?}: {}", printed, e));
-            assert_eq!(t1, t2, "roundtrip failed: {:?} printed as {:?}", s, printed);
+            assert_eq!(t1, t2, "roundtrip failed: {:?} -> {:?}", s, printed);
         }
     }
 }
