@@ -10,7 +10,7 @@ fn main() {
     tokenize_parse_and_print("λf.λx.f (f (f x))");
 
     println!("LambdaCalculus version 0.1");
-    println!("Enter #quit to quit\n");
+    println!("Enter /quit to quit\n");
 
     // And now the REPL
     loop {
@@ -21,7 +21,7 @@ fn main() {
             Ok(0) => break, // ctrl-d
             Ok(_) => {
                 let line = input.trim();
-                if line.eq_ignore_ascii_case("#quit") {
+                if line.eq_ignore_ascii_case("/quit") {
                     break;
                 }
                 match parse_str(line) {
