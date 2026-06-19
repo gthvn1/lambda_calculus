@@ -71,7 +71,7 @@ fn tokenize(input: &str) -> Vec<Token> {
 // x y :  term -> app -> atom -> ...
 //
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Term {
     Variable(String),
     Application(Box<Term>, Box<Term>),

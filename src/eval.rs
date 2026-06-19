@@ -50,6 +50,26 @@ use std::collections::HashSet;
 //   -> \w. (f[f:= \y. x] w[f:=\y.x])
 //   -> \w. (\y. x) w
 
+fn substitute(m: &Term, x: &str, n: &Term) -> Term {
+    match m {
+        Term::Variable(v) => {
+            // x[x:=N] = N   (same var -> replaced)
+            // y[x:=N] = y   (other var -> unchanged)
+            if v == x { n.clone() } else { Term::var(v) }
+        }
+        Term::Application(t1, t2) => {
+            // (A B)[x:=N] = (A[x:=N] B[x:=N])
+            Term::app(substitute(t1, x, n), substitute(t2, x, n))
+        }
+        Term::Abstraction(_, _) => {
+            // 1. v == x:  \v. M is unchanged, (v shadows x; stop don't recurse)
+            // 2. v != x AND v not in FV(N),   \v. (M[x:=N))  (safe, recurse)
+            // 3. v != x AND v in FV(N): CAPTURE risk -> alpha-rename v to fresh w, then recurse
+            todo!()
+        }
+    }
+}
+
 fn free_variables(t: &Term) -> HashSet<String> {
     match t {
         Term::Variable(v) => {
@@ -126,5 +146,78 @@ mod tests {
         let fv = free_variables(&t);
         assert_eq!(fv.len(), 1);
         assert!(fv.contains("y"));
+    }
+
+    // --------------------------- SUBSTITUTION: variable
+    #[test]
+    fn subst_var_same() {
+        // x[x := y]  ->  y   (same variable, replaced)
+        let m = Term::var("x");
+        let n = Term::var("y");
+        assert_eq!(substitute(&m, "x", &n), Term::var("y"));
+    }
+
+    #[test]
+    fn subst_var_other() {
+        // z[x := y]  ->  z   (different variable, unchanged)
+        let m = Term::var("z");
+        let n = Term::var("y");
+        assert_eq!(substitute(&m, "x", &n), Term::var("z"));
+    }
+
+    #[test]
+    fn subst_var_replaced_by_compound() {
+        // x[x := (g h)]  ->  g h   (N is not just a variable)
+        let m = Term::var("x");
+        let n = Term::app(Term::var("g"), Term::var("h"));
+        assert_eq!(
+            substitute(&m, "x", &n),
+            Term::app(Term::var("g"), Term::var("h"))
+        );
+    }
+
+    // --------------------------- SUBSTITUTION: application
+
+    #[test]
+    fn subst_app_both_sides() {
+        // (x x)[x := y]  ->  y y   (substitute in both children)
+        let m = Term::app(Term::var("x"), Term::var("x"));
+        let n = Term::var("y");
+        assert_eq!(
+            substitute(&m, "x", &n),
+            Term::app(Term::var("y"), Term::var("y"))
+        );
+    }
+
+    #[test]
+    fn subst_app_mixed() {
+        // (x z)[x := y]  ->  y z   (only x replaced, z untouched)
+        let m = Term::app(Term::var("x"), Term::var("z"));
+        let n = Term::var("y");
+        assert_eq!(
+            substitute(&m, "x", &n),
+            Term::app(Term::var("y"), Term::var("z"))
+        );
+    }
+
+    #[test]
+    fn subst_app_nested() {
+        // ((x x) x)[x := y]  ->  (y y) y   (recursion goes deep)
+        let m = Term::app(Term::app(Term::var("x"), Term::var("x")), Term::var("x"));
+        let n = Term::var("y");
+        let expected = Term::app(Term::app(Term::var("y"), Term::var("y")), Term::var("y"));
+        assert_eq!(substitute(&m, "x", &n), expected);
+    }
+
+    #[test]
+    fn subst_app_compound_n() {
+        // (x x)[x := (\a. a)]  ->  (\a. a) (\a. a)   (N is an abstraction, cloned twice)
+        let m = Term::app(Term::var("x"), Term::var("x"));
+        let n = Term::abs("a", Term::var("a"));
+        let expected = Term::app(
+            Term::abs("a", Term::var("a")),
+            Term::abs("a", Term::var("a")),
+        );
+        assert_eq!(substitute(&m, "x", &n), expected);
     }
 }
