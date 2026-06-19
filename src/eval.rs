@@ -1,3 +1,6 @@
+use crate::analysis::Term;
+use std::collections::HashSet;
+
 // Notions used for the evaluation:
 //
 // bound/free,
@@ -41,3 +44,87 @@
 //   -> (\w. (g y))
 //
 // (λf. (λx. f x)) (λy. x)
+//   -> (\x. f x) [f:= \y.x] ; FV({x}) \ y == FV[{x}]
+//   -> capture risk -> (\w. f w) [f:= \y. x]
+//   -> \w. (f w)[f:= \y. x]
+//   -> \w. (f[f:= \y. x] w[f:=\y.x])
+//   -> \w. (\y. x) w
+
+fn free_variables(t: &Term) -> HashSet<String> {
+    match t {
+        Term::Variable(v) => {
+            // FV(Variable x) = {x}
+            let mut s = HashSet::new();
+            s.insert(v.clone());
+            s
+        }
+        Term::Application(m, n) => {
+            // FV(Application A B) = FV[A] union FV[B]
+            let mut fv_m = free_variables(m);
+            let fv_n = free_variables(n);
+
+            fv_m.extend(fv_n);
+            fv_m
+        }
+        Term::Abstraction(v, m) => {
+            // FV(Abstraction v M) = FV[M] \ {v}
+            let mut fv_m = free_variables(m);
+            fv_m.remove(v.as_str());
+            fv_m
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fv_variable() {
+        let t = Term::var("x");
+        let fv = free_variables(&t);
+        assert!(fv.contains("x"));
+        assert_eq!(fv.len(), 1);
+    }
+
+    #[test]
+    fn fv_application() {
+        // FV(x y) = {x, y}
+        let t = Term::app(Term::var("x"), Term::var("y"));
+        let fv = free_variables(&t);
+        assert_eq!(fv.len(), 2);
+        assert!(fv.contains("x") && fv.contains("y"));
+    }
+
+    #[test]
+    fn fv_abstraction_binds() {
+        // FV(λx. x) = {}  (x is bound)
+        let t = Term::abs("x", Term::var("x"));
+        assert!(free_variables(&t).is_empty());
+    }
+
+    #[test]
+    fn fv_abstraction_free_body() {
+        // FV(λx. y) = {y}  (x removed, y stays free)
+        let t = Term::abs("x", Term::var("y"));
+        let fv = free_variables(&t);
+        assert_eq!(fv.len(), 1);
+        assert!(fv.contains("y"));
+    }
+
+    #[test]
+    fn fv_shadowing() {
+        // FV(λx. λx. x) = {}  (inner λx binds; remove handles it)
+        let t = Term::abs("x", Term::abs("x", Term::var("x")));
+        assert!(free_variables(&t).is_empty());
+    }
+
+    #[test]
+    fn fv_mixed() {
+        // FV(λx. x y) = {y}   body is (x y), x removed, y stays
+        let t = Term::abs("x", Term::app(Term::var("x"), Term::var("y")));
+        let fv = free_variables(&t);
+        assert_eq!(fv.len(), 1);
+        assert!(fv.contains("y"));
+    }
+}

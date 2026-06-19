@@ -1,4 +1,5 @@
 mod analysis;
+mod eval;
 
 use std::io;
 use std::io::Write;

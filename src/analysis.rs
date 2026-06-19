@@ -81,15 +81,15 @@ pub enum Term {
 // Helpers to build Term
 #[allow(dead_code)]
 impl Term {
-    fn var(name: &str) -> Term {
+    pub(crate) fn var(name: &str) -> Term {
         Term::Variable(name.to_string())
     }
 
-    fn app(t1: Term, t2: Term) -> Term {
+    pub(crate) fn app(t1: Term, t2: Term) -> Term {
         Term::Application(Box::new(t1), Box::new(t2))
     }
 
-    fn abs(name: &str, t: Term) -> Term {
+    pub(crate) fn abs(name: &str, t: Term) -> Term {
         Term::Abstraction(name.to_string(), Box::new(t))
     }
 }
