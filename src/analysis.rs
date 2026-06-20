@@ -12,6 +12,7 @@ pub fn parse_str(input: &str) -> Result<Term, ParseError> {
 }
 
 // This entry point is used for debugging puprpose
+#[allow(dead_code)]
 pub fn tokenize_parse_and_print(input: &str) {
     println!("\nINPUT     : {}", input);
 

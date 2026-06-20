@@ -4,11 +4,12 @@ mod eval;
 use std::io;
 use std::io::Write;
 
-use analysis::{parse_str, tokenize_parse_and_print};
+use analysis::parse_str;
+use eval::normalize;
 
 fn main() {
     // debug
-    tokenize_parse_and_print("λf.λx.f (f (f x))");
+    //tokenize_parse_and_print("λf.λx.f (f (f x))");
 
     println!("LambdaCalculus version 0.1");
     println!("Enter /quit to quit\n");
@@ -26,8 +27,16 @@ fn main() {
                     break;
                 }
                 match parse_str(line) {
-                    Ok(t) => println!("{}", t),
                     Err(e) => eprintln!("Parsing failed: {:?}", e),
+                    Ok(term) => {
+                        println!("{}", term);
+                        match normalize(&term, 100) {
+                            eval::Reduction::NormalForm(t) => println!("Normal form: {}", t),
+                            eval::Reduction::MaxStepsReached(t) => {
+                                println!("Max steps reached: {}", t)
+                            }
+                        }
+                    }
                 }
             }
             Err(error) => println!("Failed to read input: {error}"),

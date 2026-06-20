@@ -171,7 +171,7 @@ pub enum Reduction {
     MaxStepsReached(Term), // stopped at the step limit; this Term can be resumed.
 }
 
-fn normalize(m: &Term, max_steps: usize) -> Reduction {
+pub fn normalize(m: &Term, max_steps: usize) -> Reduction {
     let mut current = m.clone();
 
     for _ in 0..max_steps {
