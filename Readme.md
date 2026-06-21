@@ -6,8 +6,9 @@ The grammar of lambda calculus
 - Greedy λ (or Greedy lambda): the body extends as far to the right as possible.
 - Left-associative application: f g h = (f g) h.
 
+- You can use [rwlrap](https://github.com/hanslub42/rlwrap) for a better experience:
 ```haskell
-❯ cargo run
+❯ rlwrap cargo run
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
      Running `target/debug/lambda_calculus`
 LambdaCalculus version 0.1
