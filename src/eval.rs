@@ -141,7 +141,7 @@ fn substitute(m: &Term, x: &str, n: &Term) -> Term {
 // 1. Applicative order: reduce argument first
 // 2. Normal order: always reduce left first
 // With Ω there is a trap because it cannot be reduced...
-fn reduce_once(m: &Term) -> Option<Term> {
+pub fn reduce_once(m: &Term) -> Option<Term> {
     match m {
         Term::Variable(_) => None,
         Term::Application(f, arg) => {
