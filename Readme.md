@@ -7,21 +7,25 @@ The grammar of lambda calculus
 - Left-associative application: f g h = (f g) h.
 
 - You can use [rwlrap](https://github.com/hanslub42/rlwrap) for a better experience:
-```haskell
+```rust
 ❯ rlwrap cargo run
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
      Running `target/debug/lambda_calculus`
 LambdaCalculus version 0.1
-Enter /quit to quit
+Enter :quit to quit, :help for help
 
-λ> (\f. \x. f (f x)) g z
-(λf. λx. f (f x)) g z
-Normal form: g (g z)
-λ> (\x. x x)(\x. x x)
-(λx. x x) (λx. x x)
-Max steps reached: (λx. x x) (λx. x x)
+λ> :help
+:quit      quit the REPL
+:current   show the current term
+:step      reduce the current term by one step
+:reduce    reduce the current term to normal form
+:help      show this help
 λ> (\x. x) y
-(λx. x) y
-Normal form: y
-λ> /quit
+λ> :step
+step: y
+λ> :step
+it is already a normal form
+λ> :current
+y
+λ> :quit
 ```
