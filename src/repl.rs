@@ -1,11 +1,14 @@
 use crate::analysis::{Term, parse_str};
 use crate::eval::{Reduction, normalize, reduce_once};
+use std::collections::HashMap;
 use std::io::{self, Write};
 
 #[derive(Clone, Copy)]
 enum Command {
     Current,
+    Env,
     Help,
+    Let,
     Quit,
     Reduce,
     Step,
@@ -20,19 +23,29 @@ struct CommandInfo {
 
 const COMMANDS: &[CommandInfo] = &[
     CommandInfo {
-        name: ":quit",
-        command: Command::Quit,
-        description: "quit the REPL",
-    },
-    CommandInfo {
         name: ":current",
         command: Command::Current,
         description: "show the current term",
     },
     CommandInfo {
-        name: ":step",
-        command: Command::Step,
-        description: "reduce the current term by one step",
+        name: ":env",
+        command: Command::Env,
+        description: "dump all bindings in the current environmement",
+    },
+    CommandInfo {
+        name: ":help",
+        command: Command::Help,
+        description: "show this help",
+    },
+    CommandInfo {
+        name: ":let",
+        command: Command::Let,
+        description: "bind <NAME> to current into env. NAME must be uppercase.",
+    },
+    CommandInfo {
+        name: ":quit",
+        command: Command::Quit,
+        description: "quit the REPL",
     },
     CommandInfo {
         name: ":reduce",
@@ -40,9 +53,9 @@ const COMMANDS: &[CommandInfo] = &[
         description: "reduce the current term to normal form",
     },
     CommandInfo {
-        name: ":help",
-        command: Command::Help,
-        description: "show this help",
+        name: ":step",
+        command: Command::Step,
+        description: "reduce the current term by one step",
     },
 ];
 
@@ -59,11 +72,19 @@ impl Command {
 
 pub struct Repl {
     current: Option<Term>,
+    env: HashMap<String, Term>,
 }
 
 impl Repl {
     pub fn new() -> Self {
-        Repl { current: None }
+        let mut env = HashMap::new();
+        // Add some "libraries"
+        env.insert("TRUE".to_string(), parse_str("λx.λy.x").unwrap());
+        env.insert("FALSE".to_string(), parse_str("λx.λy.y").unwrap());
+        env.insert("AND".to_string(), parse_str("λp.λq.p q p").unwrap());
+        env.insert("OR".to_string(), parse_str("λp.λq.p p q").unwrap());
+
+        Repl { current: None, env }
     }
 
     pub fn run(&mut self) {
@@ -97,14 +118,45 @@ impl Repl {
 
     // Return false to stop the loop
     fn process_line(&mut self, line: &str) -> bool {
-        let cmd = Command::from_str(line);
-        match cmd {
+        if line.is_empty() {
+            // Nothing to do just loop into the repl
+            return true;
+        }
+
+        let cmd: Vec<&str> = line.split_whitespace().collect();
+        let cmd_name = Command::from_str(cmd[0]);
+        match cmd_name {
             Command::Quit => return false,
             Command::Current => {
                 if let Some(term) = &self.current {
                     println!("{}", term);
                 } else {
                     println!("no lambda expression");
+                }
+            }
+            Command::Env => {
+                // Cannot be empty: we have at least TRUE and few others
+                for (k, v) in self.env.iter() {
+                    println!("{} -> {}", k, v);
+                }
+            }
+            Command::Let => {
+                // We are expecting one argument.
+                match cmd.get(1) {
+                    None => println!("a name is expected"),
+                    Some(s) => {
+                        if s.chars().all(|c| c.is_alphabetic() && c.is_uppercase()) {
+                            match &self.current {
+                                None => println!("current is empty, nothing to bind"),
+                                Some(t) => match self.env.insert(s.to_string(), t.clone()) {
+                                    None => println!("{} added into env", *s),
+                                    Some(_) => println!("{} has been updated", *s),
+                                },
+                            }
+                        } else {
+                            println!("{} must be uppercased", s);
+                        }
+                    }
                 }
             }
             Command::Step => {
