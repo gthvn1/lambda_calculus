@@ -1,5 +1,5 @@
 use crate::analysis::{Term, parse_str};
-use crate::eval::{Reduction, normalize, reduce_once};
+use crate::eval::{Reduction, expand, normalize, reduce_once};
 use std::collections::HashMap;
 use std::io::{self, Write};
 
@@ -107,7 +107,9 @@ impl Repl {
                     } else {
                         match parse_str(line) {
                             Err(e) => eprintln!("Parsing failed: {:?}", e),
-                            Ok(term) => self.current = Some(term),
+                            Ok(term) => {
+                                self.current = Some(expand(&term, &self.env));
+                            }
                         }
                     }
                 }

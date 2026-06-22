@@ -1,5 +1,5 @@
 use crate::analysis::Term;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 // Notions used for the evaluation:
 //
@@ -130,6 +130,17 @@ fn substitute(m: &Term, x: &str, n: &Term) -> Term {
                 }
             }
         }
+    }
+}
+
+pub fn expand(m: &Term, env: &HashMap<String, Term>) -> Term {
+    match m {
+        Term::Variable(name) => match env.get(name) {
+            Some(def) => def.clone(),
+            None => m.clone(),
+        },
+        Term::Application(m, n) => Term::app(expand(m, env), expand(n, env)),
+        Term::Abstraction(v, m) => Term::abs(v, expand(m, env)),
     }
 }
 
@@ -514,5 +525,63 @@ mod tests {
             Reduction::MaxStepsReached(_) => {} // good, it stopped
             _ => panic!("expected max steps reached"),
         }
+    }
+}
+
+#[cfg(test)]
+mod expand_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn make_env(pairs: &[(&str, Term)]) -> HashMap<String, Term> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn expand_known_name() {
+        // env: TRUE = \a. \b. a ; expand(TRUE) -> \a. \b. a
+        let truedef = Term::abs("a", Term::abs("b", Term::var("a")));
+        let env = make_env(&[("TRUE", truedef.clone())]);
+        assert_eq!(expand(&Term::var("TRUE"), &env), truedef);
+    }
+
+    #[test]
+    fn expand_unknown_name_unchanged() {
+        // env empty ; expand(x) -> x
+        let env = make_env(&[]);
+        assert_eq!(expand(&Term::var("x"), &env), Term::var("x"));
+    }
+
+    #[test]
+    fn expand_in_application() {
+        // env: TRUE = \a.\b.a ; expand(TRUE x) -> (\a.\b.a) x   (structure preserved!)
+        let truedef = Term::abs("a", Term::abs("b", Term::var("a")));
+        let env = make_env(&[("TRUE", truedef.clone())]);
+        let input = Term::app(Term::var("TRUE"), Term::var("x"));
+        let expected = Term::app(truedef, Term::var("x"));
+        assert_eq!(expand(&input, &env), expected);
+    }
+
+    #[test]
+    fn expand_in_abstraction_body() {
+        // env: I = \z. z ; expand(\x. I) -> \x. (\z. z)
+        let idef = Term::abs("z", Term::var("z"));
+        let env = make_env(&[("I", idef.clone())]);
+        let input = Term::abs("x", Term::var("I"));
+        let expected = Term::abs("x", idef);
+        assert_eq!(expand(&input, &env), expected);
+    }
+
+    #[test]
+    fn expand_multiple_names() {
+        // env: T = \a.\b.a, F = \a.\b.b ; expand(T F) -> (\a.\b.a) (\a.\b.b)
+        let t = Term::abs("a", Term::abs("b", Term::var("a")));
+        let f = Term::abs("a", Term::abs("b", Term::var("b")));
+        let env = make_env(&[("T", t.clone()), ("F", f.clone())]);
+        let input = Term::app(Term::var("T"), Term::var("F"));
+        assert_eq!(expand(&input, &env), Term::app(t, f));
     }
 }
